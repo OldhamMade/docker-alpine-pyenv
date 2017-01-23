@@ -1,0 +1,126 @@
+#!/usr/bin/env python
+
+import sys
+import re
+import logging
+import subprocess
+
+try:
+    from urllib.request import urlopen
+except ImportError:
+    from urllib2 import urlopen
+
+
+logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
+log = logging.getLogger('build')
+
+BUILD_VERSION = "0.2"
+MIN_PYTHON_VERSION = '2.7'  # releases less than this fail to build on alpine
+INDEX_URL = 'https://www.python.org/ftp/python/'
+
+RE_VERSIONS = re.compile(r'\"(\d\.\d+\.?\d*)', re.MULTILINE)
+RE_HAS_PACKAGE = re.compile(r'', re.MULTILINE | re.IGNORECASE)
+
+DOCKER_BUILD_COMMAND = """\
+docker build --build-arg PYTHON_INSTALL_VERSION=%s \
+-t oldhammade/alpine-pyenv-py%s:%s ./template/ \
+"""
+DOCKER_TAG_LATEST_COMMAND = """\
+docker tag oldhammade/alpine-pyenv-py%s:%s oldhammade/alpine-pyenv-py%s:latest\
+"""
+
+
+def get_version_list():
+    """Return a list of Python release versions.
+
+    List of releases is obtained from Python's office FTP site.
+    """
+    response = urlopen(INDEX_URL).read()
+    return RE_VERSIONS.findall(response)
+
+
+def has_package(version):
+    """Return True if there's a gzip package available for download."""
+    log.info('Checking for valid version: %s', version)
+    package_url = INDEX_URL + version + '/'
+    response = urlopen(package_url).read()
+    return bool(RE_HAS_PACKAGE.findall(response))
+
+
+def get_versions():
+    """Return a list of Python versions with available packages."""
+    return [version for version in get_version_list() if has_package(version)]
+
+
+def is_minor_version(version):
+    """Return True if version is a MINOR version.
+
+    True if MINOR version, eg. 2.7 or 3.0, False if PATCH, eg. 2.7.12"""
+    return version[-2:] == '.0' or version.count('.') == 1
+
+
+def filter_old_versions(versions, minimum):
+    """Yield the highest PATCH version for each MINOR version."""
+    min_major, min_minor = map(int, minimum.split('.'))
+
+    for version in versions:
+        major, minor, patch = map(int, version.split('.'))
+
+        if major < min_major:
+            continue
+
+        if major == min_major and minor < min_minor:
+            continue
+
+        yield version
+
+
+def get_latest_versions(versions):
+    """Return only the latest PATCH for each MAJOR.MINOR release."""
+    version_map = dict((v[:3], []) for v in versions if is_minor_version(v))
+
+    for version in versions:
+        if is_minor_version(version):
+            continue
+
+        patch = int(version.split('.')[-1])
+        version_map[version[:3]].append(patch)
+
+    return sorted(['%s.%s' % (v, max(l)) for v, l in version_map.items() if l])
+
+
+def build_docker_image(version):
+    """Build individual docker images based on Dockerfile template.
+
+    Uses `subprocess.call(..., shell=True)` with the `shell=True` argument
+    because we need access to $PATH to find the docker binary.
+    """
+    command = DOCKER_BUILD_COMMAND % (version, version, BUILD_VERSION)
+    log.info("-" * 80)
+    log.info("Building image for %s:%s", version, BUILD_VERSION)
+    subprocess.call(command, shell=True)
+
+
+def tag_docker_image_latest(version):
+    """Create a "latest" tag for the docker image."""
+    command = DOCKER_TAG_LATEST_COMMAND % (version, BUILD_VERSION, version)
+    log.info("Tagging image %s:%s as latest", version, BUILD_VERSION)
+    subprocess.call(command, shell=True)
+
+
+def build_docker_images(versions):
+    """Build and tag a docker container for each version."""
+    for version in versions:
+        build_docker_image(version)
+        tag_docker_image_latest(version)
+
+
+def main():
+    versions = get_versions()
+    latest_versions = get_latest_versions(versions)
+    recent_versions = filter_old_versions(latest_versions, MIN_PYTHON_VERSION)
+    build_docker_images(recent_versions)
+
+
+if __name__ == '__main__':
+    main()
