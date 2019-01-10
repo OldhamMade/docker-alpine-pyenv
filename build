@@ -14,20 +14,25 @@ except ImportError:
 logging.basicConfig(stream=sys.stderr, level=logging.DEBUG)
 log = logging.getLogger('build')
 
-BUILD_VERSION = "0.2"
+BUILD_VERSION = "3.7"
 MIN_PYTHON_VERSION = '2.7'  # releases less than this fail to build on alpine
 INDEX_URL = 'https://www.python.org/ftp/python/'
+
+PREFIX = "oldhammade/alpine-glibc-pyenv"
 
 RE_VERSIONS = re.compile(r'\"(\d\.\d+\.?\d*)', re.MULTILINE)
 RE_HAS_PACKAGE = re.compile(r'', re.MULTILINE | re.IGNORECASE)
 
 DOCKER_BUILD_COMMAND = """\
 docker build --build-arg PYTHON_INSTALL_VERSION=%s \
--t oldhammade/alpine-pyenv-py%s:%s ./template/ \
-"""
+-t {prefix}-py%s:%s ./template/ \
+""".format(prefix=PREFIX)
 DOCKER_TAG_LATEST_COMMAND = """\
-docker tag oldhammade/alpine-pyenv-py%s:%s oldhammade/alpine-pyenv-py%s:latest\
-"""
+docker tag {prefix}-py%s:%s {prefix}-py%s:latest\
+""".format(prefix=PREFIX)
+DOCKER_PUSH_COMMAND = """\
+docker push {prefix}-py%s:%s\
+""".format(prefix=PREFIX)
 
 
 def get_version_list():
@@ -108,11 +113,19 @@ def tag_docker_image_latest(version):
     subprocess.call(command, shell=True)
 
 
+def push_docker_image(version):
+    """Push a tag to the docker hub."""
+    command = DOCKER_PUSH_COMMAND % (version, BUILD_VERSION)
+    log.info("Push image %s:%s", version, BUILD_VERSION)
+    subprocess.call(command, shell=True)
+
+
 def build_docker_images(versions):
     """Build and tag a docker container for each version."""
     for version in versions:
         build_docker_image(version)
         tag_docker_image_latest(version)
+        push_docker_image(version)
 
 
 def main():

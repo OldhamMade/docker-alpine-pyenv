@@ -1,4 +1,4 @@
-FROM oldhammade/alpine-pyenv:0.2
+FROM oldhammade/alpine-glibc-pyenv:3.7
 
 MAINTAINER Phillip B Oldham <info@oldhammade.net>
 
@@ -8,7 +8,9 @@ LABEL name="Alpine image containing pyenv" \
       licence="MIT"
 
 ARG PYTHON_INSTALL_VERSION
-ENV VERSION_INSTALL_DIR="$PYENV_ROOT/versions/$PYTHON_INSTALL_VERSION"
+ENV VERSION_INSTALL_DIR="$PYENV_ROOT/versions/$PYTHON_INSTALL_VERSION" \
+    CONFIGURE_OPTS="--enable-shared --enable-optimizations" \
+    CONFIG_SHELL="/bin/sh"
 
 RUN \
     pyenv install -v $PYTHON_INSTALL_VERSION && \

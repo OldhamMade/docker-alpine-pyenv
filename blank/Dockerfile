@@ -1,9 +1,9 @@
-FROM alpine:3.4
+FROM oldhammade/alpine-glibc:3.7
 
 MAINTAINER Phillip B Oldham <info@oldhammade.net>
 
-LABEL name="Alpine image containing pyenv" \
-      description="Basic Alpine image plus a blank pyenv, ready for you to install your own version of python" \
+LABEL name="Alpine image containing pyenv with glibc" \
+      description="Basic Alpine image plus a blank pyenv, ready for you to install your own version of python. Based on frolvlad/alpine-glibc" \
       distribution="alpine" \
       licence="MIT"
 
@@ -30,26 +30,25 @@ g++ \
 git \
 linux-headers \
 ncurses-dev \
-openssl-dev \
+libressl-dev \
 patch \
 readline-dev \
 sqlite-dev \
+tini \
 zlib-dev \
 "
 
 RUN echo "ipv6" >> /etc/modules && \
     set -x && \
-    sed -i -e 's/v3\.4/edge/g' /etc/apk/repositories && \
     apk update && \
     apk upgrade && \
     apk add --no-cache $PACKAGES || \
       (sed -i -e 's/dl-cdn/dl-4/g' /etc/apk/repositories && apk add --no-cache $PACKAGES) && \
-    mv /usr/bin/tini /sbin/init && \
     ln -s /usr/include/locale.h /usr/include/xlocale.h && \
     update-ca-certificates && \
     curl -L https://raw.githubusercontent.com/yyuu/pyenv-installer/master/bin/pyenv-installer \
       | sh && \
-    apk del curl git && \
+    apk del git && \
     rm -rf /var/cache/apk/* && \
     rm -rf /tmp/*
 
